@@ -23,11 +23,11 @@ const double PI = 3.141592653589793238463;  // ain't it obvious?
 const long double h = 6.582119514e-16;      // planck constant
 const double _h = h / (2 * PI);             // reduced planck constant
 const double k = 8.9875517873681764e9;      // coulomb's constant
-const cpp_dec_float_100 dt = 0.00694444444;          // delta time
+const cpp_dec_float_100 dt = 1e-14;         // delta time
 const long long c = 299792458;              // speed of light
 
 // SPACE
-const double HEIGHT = 40, WIDTH = 40;
+const double HEIGHT = 2e-6, WIDTH = 2e-6;
 // vector<vector<int>> space(WIDTH, vector<int>(HEIGHT));
 
 // DISPLAY RELATED CONSTANTS
@@ -36,20 +36,6 @@ const double S_NONE = 5.f;          // size of an empty node
 const double S_E = 7.f;             // size of a node containing an electron
 const double S_S = 7.f;             // size of a node containing an immobile charge source
 const double SHIFT = S_E - S_NONE;  // node shift to compensate nodes' size difference
-
-vector<double> change_speed(vector<double> v0, double d, double q, double Q, double m, double r,
-    vector<double> q_pos, vector<double> Q_pos)
-{
-    double e = (k * Q) / (r * r);
-    double f = q * e;
-    double a = f / m;
-    double v = sqrt(2 * a * d);
-    double cosa = abs(q_pos[0] - Q_pos[0]) / r;
-    double sina = abs(q_pos[1] - Q_pos[1]) / r;
-    double vx = v * cosa;
-    double vy = v * sina;
-    return { v0[0] + vx, v0[1] + vy };
-}
 
 class Source
 {
@@ -75,9 +61,11 @@ public:
     cpp_dec_float_100 d;
     vector<cpp_dec_float_100> a;
     vector<cpp_dec_float_100> f;
+    Color color;
 	Particle(vector<cpp_dec_float_100> _pos, vector<cpp_dec_float_100> _v, 
         vector<cpp_dec_float_100> _a, cpp_dec_float_100 _m, cpp_dec_float_100 _q, 
-        double _s, cpp_dec_float_100 _e, vector<cpp_dec_float_100> _f)
+        double _s, cpp_dec_float_100 _e, vector<cpp_dec_float_100> _f,
+        Color _color)
 	{
 		pos = _pos;
 		v = _v;
@@ -88,6 +76,7 @@ public:
         d = 0;
         a = _a;
         f = _f;
+        color = _color;
 	}
     void update_forces(vector<Source> s)
     {
@@ -105,6 +94,7 @@ public:
     }
     void move()
     {
+        // this shit is called verlet's integration
         cpp_dec_float_100 x_new = pos[0] + v[0] * dt + 0.5 * a[0] * dt * dt,
             y_new = pos[1] + v[1] * dt + 0.5 * a[1] * dt * dt;
         cpp_dec_float_100 ax_new = f[0] / m,
@@ -169,20 +159,84 @@ class Electron : public Particle {
 public:
     Electron(vector<cpp_dec_float_100> _pos, vector<cpp_dec_float_100> _v,
         vector<cpp_dec_float_100> _a = { 0, 0 }, vector<cpp_dec_float_100> _f = { 0, 0 }) :
-        Particle(_pos, _v, _a, 9.10938356E-31, -1.602176634E-19, 0.5, 0.0, _f) {}
+        Particle(_pos, _v, _a, 9.10938356E-31, -1.602176634E-19, 0.5, 0.0, _f,
+            Color(173, 216, 230, 170)) {}
+};
+
+class Positron : public Particle {
+public:
+    Positron(vector<cpp_dec_float_100> _pos, vector<cpp_dec_float_100> _v,
+        vector<cpp_dec_float_100> _a = { 0, 0 }, vector<cpp_dec_float_100> _f = { 0, 0 }) : 
+        Particle(_pos, _v, _a, 9.10938356e-31, 1.6021766208e-19, 0.5, 0.0, _f,
+            Color(0, 0, 139, 170)) {}
+};
+
+class ParticleSystem
+{
+public:
+    vector<Particle> particles;
+    ParticleSystem(vector<Particle> _particles)
+    {
+        particles = _particles;
+    }
+    /*void update_forces(vector<Source> s)
+    {
+        for (int i = 0; i < s.size(); i++)
+        {
+            cpp_dec_float_100 dx = pos[0] - s[i].pos[0],
+                dy = pos[1] - s[i].pos[1];
+            cpp_dec_float_100 r = sqrt((dx * dx) + (dy * dy));
+            cpp_dec_float_100 sf = k * q * s[i].Q / (r * r);
+            cpp_dec_float_100 ux = dx / r,
+                uy = dy / r;
+            f[0] += sf * ux;
+            f[1] += sf * uy;
+        }
+    }*/
+    void update_forces()
+    {
+        for (int i = 0; i < particles.size(); i++)
+        {
+            for (int j = 0; j < particles.size(); j++)
+            {
+                if (i != j)
+                {
+                    cpp_dec_float_100 dx = particles[i].pos[0] - particles[j].pos[0],
+                        dy = particles[i].pos[1] - particles[j].pos[1];
+                    cpp_dec_float_100 r = sqrt((dx * dx) + (dy * dy));
+                    cpp_dec_float_100 sf = k * particles[i].q * particles[j].q / (r * r);
+                    cpp_dec_float_100 ux = dx / r,
+                        uy = dy / r;
+                    particles[i].f[0] += sf * ux;
+                    particles[i].f[1] += sf * uy;
+                }
+            }
+        }
+    }
+    void process()
+    {
+        for (int i = 0; i < particles.size(); i++)
+        {
+            particles[i].move();
+        }
+    }
 };
 
 int main()
 {
     cout << "STARTED" << endl;
-    Electron x({ 5, 7.49 }, { 0, 0 }, { 0, 0 }, {1e-23, 0});
-    Source s({ 5, 5 }, 1e-13);
-    Source s1({ 5, 10 }, -1e-13);
+    Electron x({ 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 });
+    Positron y({ WIDTH, HEIGHT }, { 0, 0 }, { 0, 0 }, { 0, 0 });
+    Source s({ 1e-6, 0 }, -1e-23);
+    Source s1({ 1e-6, 2e-6 }, 5e-21);
     sf::ContextSettings settings;
     settings.antialiasingLevel = 8;
-    RenderWindow window(VideoMode(1280, 900), L"EPsim", Style::Default, settings);
-
+    RenderWindow window(VideoMode(WIDTH * 205.f * 1e6, HEIGHT * 205.f * 1e6), 
+        L"EPsim", Style::Default, settings);
+    window.setFramerateLimit(60);
     window.setVerticalSyncEnabled(true);
+    cpp_dec_float_100 mindist = 1;
+    ParticleSystem ps({ x, y });
     while (window.isOpen())
     {
         Event event;
@@ -191,29 +245,29 @@ int main()
             if (event.type == Event::Closed)
                 window.close();
         }
-        s.pos[1] += 1e-2;
-        s1.pos[1] += 1e-2;
-        s.pos[0] += 1e-2;
-        s1.pos[0] += 1e-2;
-        x.update_forces({ s, s1 });
-        x.move();
-        x.log();
-        CircleShape shape(S_E);
-        shape.setPosition(double(x.pos[0] * DBN - SHIFT),
-            double(x.pos[1] * DBN - SHIFT));
-        shape.setFillColor(Color::Blue);
-        CircleShape shape1(S_S);
-        shape1.setPosition(s.pos[0] * DBN - SHIFT, s.pos[1] * DBN - SHIFT);
-        shape1.setFillColor(Color::Red);
-        CircleShape shape2(S_S);
-        shape2.setPosition(s1.pos[0] * DBN - SHIFT, s1.pos[1] * DBN - SHIFT);
-        shape2.setFillColor(Color::Red);
         window.clear(Color::White);
-        window.draw(shape);
-        window.draw(shape1);
-        window.draw(shape2);
+        ps.update_forces();
+        ps.process();
+        Particle p1 = ps.particles[0];
+        Particle p2 = ps.particles[1];
+        cpp_dec_float_100 dist = sqrt((p1.pos[0] - p2.pos[0]) * (p1.pos[0] - p2.pos[0]) +
+            (p1.pos[1] - p2.pos[1]) * (p1.pos[1] - p2.pos[1]));
+        if (dist < mindist)
+        {
+            mindist = dist;
+            cout << "current mindist: " << mindist << endl;
+        }
+        for (int i = 0; i < ps.particles.size(); i++)
+        {
+            Particle p = ps.particles[i];
+            CircleShape shape(S_E);
+            shape.setPosition(double(p.pos[0] * DBN * 1e7 - SHIFT),
+                double(p.pos[1] * DBN * 1e7 - SHIFT));
+            shape.setFillColor(p.color);
+            window.draw(shape);
+        }
         window.display();
-        // this_thread::sleep_for(std::chrono::milliseconds(1000));
+        // this_thread::sleep_for(std::chrono::milliseconds(100));
     }
     return 0;
 }
